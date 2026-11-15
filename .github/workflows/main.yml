@@ -596,4 +596,195 @@ jobs:
                   if (!isRunning) return
 
                   if (index >= postUrls.size) {
-                      updateStatus("Поставлено лай
+                      updateStatus("Поставлено лайков: ${postUrls.size}. Возвращаемся в профиль для отправки сообщения...")
+                      webView.loadUrl(accountUrl)
+                      handler.postDelayed({
+                          if (!isRunning) return@postDelayed
+                          openMessageAndSend(accountUrl)
+                      }, randomDelay(3500, 4800))
+                      return
+                  }
+
+                  val postUrl = postUrls[index]
+                  updateStatus("Ставим лайк ${index + 1} из ${postUrls.size}...")
+                  webView.loadUrl(postUrl)
+
+                  handler.postDelayed({
+                      if (!isRunning) return@postDelayed
+
+                      val likeJs = """
+                          (function() {
+                              const unlikeSvg = document.querySelector('svg[aria-label="Не нравится"], svg[aria-label="Unlike"]');
+                              if (unlikeSvg) return 'ALREADY_LIKED';
+
+                              const likeSvg = document.querySelector('svg[aria-label="Нравится"], svg[aria-label="Like"]');
+                              if (likeSvg) {
+                                  const btn = likeSvg.closest('div[role="button"], button') || likeSvg;
+                                  btn.click();
+                                  return 'LIKED';
+                              }
+                              return 'NOT_FOUND';
+                          })();
+                      """.trimIndent()
+
+                      webView.evaluateJavascript(likeJs) {
+                          handler.postDelayed({
+                              likePostsSequentially(accountUrl, postUrls, index + 1)
+                          }, randomDelay(2200, 3400))
+                      }
+                  }, randomDelay(3200, 4500))
+              }
+
+              private fun openMessageAndSend(accountUrl: String) {
+                  if (!isRunning) return
+                  updateStatus("Нажимаем кнопку «Сообщение»...")
+
+                  val clickMsgJs = """
+                      (function() {
+                          const buttons = Array.from(document.querySelectorAll('div[role="button"], button, a'));
+                          const msgBtn = buttons.find(b => {
+                              const t = (b.innerText || '').trim().toLowerCase();
+                              return t === 'отправить сообщение' || t === 'сообщение' || t === 'message';
+                          });
+                          if (msgBtn) {
+                              msgBtn.click();
+                              return 'CLICKED';
+                          }
+                          return 'NO_BTN';
+                      })();
+                  """.trimIndent()
+
+                  webView.evaluateJavascript(clickMsgJs) { res ->
+                      if (!isRunning) return@evaluateJavascript
+
+                      if (res?.contains("NO_BTN") == true) {
+                          updateStatus("Кнопка сообщения недоступна. Возвращаемся к списку поиска...")
+                          processedAccounts.add(accountUrl)
+                          returnToSearchAndContinue()
+                          return@evaluateJavascript
+                      }
+
+                      handler.postDelayed({
+                          if (!isRunning) return@postDelayed
+                          typeAndSendMessageInDirect(accountUrl)
+                      }, randomDelay(4200, 5500))
+                  }
+              }
+
+              private fun typeAndSendMessageInDirect(accountUrl: String) {
+                  if (!isRunning) return
+                  updateStatus("Печатаем: «$messageToSend»...")
+
+                  val escapedMsg = escapeJs(messageToSend)
+                  val sendJs = """
+                      (function() {
+                          const notNow = Array.from(document.querySelectorAll('button, div[role="button"]'))
+                              .find(b => /не сейчас|not now/i.test(b.innerText || ''));
+                          if (notNow) notNow.click();
+
+                          const box = document.querySelector('div[role="textbox"][contenteditable="true"], textarea[placeholder], div[aria-label*="Сообщение"], div[aria-label*="Message"]');
+                          if (!box) return 'NO_INPUT';
+
+                          box.focus();
+                          if (box.tagName.toLowerCase() === 'textarea') {
+                              const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                              valueSetter.call(box, '$escapedMsg');
+                              box.dispatchEvent(new Event('input', { bubbles: true }));
+                          } else {
+                              document.execCommand('selectAll', false, null);
+                              document.execCommand('insertText', false, '$escapedMsg');
+                              box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '$escapedMsg' }));
+                          }
+
+                          setTimeout(() => {
+                              const sendBtn = Array.from(document.querySelectorAll('div[role="button"], button'))
+                                  .find(b => {
+                                      const t = (b.innerText || '').trim().toLowerCase();
+                                      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+                                      return t === 'отправить' || t === 'send' || label.includes('отправить') || label.includes('send');
+                                  });
+                              if (sendBtn) {
+                                  sendBtn.click();
+                              } else {
+                                  const enterEvent = new KeyboardEvent('keydown', {
+                                      bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13
+                                  });
+                                  box.dispatchEvent(enterEvent);
+                              }
+                          }, 900);
+
+                          return 'SENT';
+                      })();
+                  """.trimIndent()
+
+                  webView.evaluateJavascript(sendJs) {
+                      if (!isRunning) return@evaluateJavascript
+                      processedAccounts.add(accountUrl)
+                      updateStatus("✉ Сообщение отправлено! Возвращаемся в список поиска к следующему аккаунту...")
+
+                      handler.postDelayed({
+                          returnToSearchAndContinue()
+                      }, randomDelay(4500, 6800))
+                  }
+              }
+
+              private fun returnToSearchAndContinue() {
+                  if (!isRunning) return
+                  val query = searchInput.text.toString().trim().ifEmpty { "бухгалтер" }
+                  updateStatus("Возвращаемся в список поиска «$query» и выбираем следующий аккаунт...")
+                  handler.postDelayed({
+                      processNextAccountInQueue()
+                  }, randomDelay(2500, 4000))
+              }
+
+              private fun updateStatus(msg: String) {
+                  runOnUiThread {
+                      statusText.text = msg
+                  }
+              }
+
+              private fun randomDelay(minMs: Long, maxMs: Long): Long {
+                  return Random.nextLong(minMs, maxMs)
+              }
+
+              private fun dp(value: Int): Int {
+                  return TypedValue.applyDimension(
+                      TypedValue.COMPLEX_UNIT_DIP,
+                      value.toFloat(),
+                      resources.displayMetrics
+                  ).toInt()
+              }
+
+              private fun escapeJs(str: String): String {
+                  return str.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+              }
+
+              inner class BotJsBridge {
+                  @JavascriptInterface
+                  fun log(message: String) {
+                      updateStatus(message)
+                  }
+              }
+          }
+          EOF
+
+      - name: Установка Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Установка Gradle 8.4
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+
+      - name: Сборка APK-файла
+        working-directory: InstaBuhBot_Android
+        run: gradle assembleDebug --no-daemon
+
+      - name: Выгрузка готового APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: InstaBuhBot-APK
+          path: InstaBuhBot_Android/app/build/outputs/apk/debug/app-debug.apk
