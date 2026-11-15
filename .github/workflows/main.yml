@@ -9,52 +9,591 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Скачивание файлов проекта
-        uses: actions/checkout@v4
-
-      - name: Установка Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Запуск скрипта создания структуры Android-проекта
+      - name: Создание структуры проекта и очистка кода
         run: |
-          echo "Файлы в репозитории:"
-          ls -la
-          for f in *.py *.py.txt *.ru; do
-            if [ -f "$f" ]; then
-              echo "Запускаем скрипт: $f"
-              python3 "$f"
-            fi
-          done
+          mkdir -p InstaBuhBot_Android/app/src/main/java/com/example/instabuhbot
 
-      - name: Установка Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
+          cat << 'EOF' > InstaBuhBot_Android/settings.gradle
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "InstaBuhBot"
+          include ':app'
+          EOF
 
-      - name: Поиск папки проекта и сборка APK-файла
-        run: |
-          GRADLE_FILE=$(find . -maxdepth 3 -name "settings.gradle*" | head -n 1)
-          if [ -z "$GRADLE_FILE" ]; then
-            GRADLE_FILE=$(find . -maxdepth 3 -name "build.gradle*" | head -n 1)
-          fi
-          if [ -z "$GRADLE_FILE" ]; then
-            echo "ОШИБКА: Скрипт не создал файлы build.gradle или settings.gradle!"
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$GRADLE_FILE")
-          echo "Переходим в папку проекта: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper --gradle-version 8.4
-          fi
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          cat << 'EOF' > InstaBuhBot_Android/build.gradle
+          plugins {
+              id 'com.android.application' version '8.2.0' apply false
+              id 'org.jetbrains.kotlin.android' version '1.9.20' apply false
+          }
+          EOF
 
-      - name: Выгрузка готового APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Ready-Android-APK
-          path: '**/build/outputs/apk/debug/*.apk'
+          cat << 'EOF' > InstaBuhBot_Android/gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat << 'EOF' > InstaBuhBot_Android/app/build.gradle
+          plugins {
+              id 'com.android.application'
+              id 'org.jetbrains.kotlin.android'
+          }
+
+          android {
+              namespace 'com.example.instabuhbot'
+              compileSdk 34
+
+              defaultConfig {
+                  applicationId "com.example.instabuhbot"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = '17'
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.core:core-ktx:1.12.0'
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
+          }
+          EOF
+
+          cat << 'EOF' > InstaBuhBot_Android/app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="InstaBuhBot"
+                  android:supportsRtl="true"
+                  android:usesCleartextTraffic="true"
+                  android:theme="@style/Theme.AppCompat.NoActionBar">
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|screenSize|keyboardHidden"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > InstaBuhBot_Android/app/src/main/java/com/example/instabuhbot/MainActivity.kt
+          package com.example.instabuhbot
+
+          import android.annotation.SuppressLint
+          import android.graphics.Color
+          import android.graphics.Typeface
+          import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
+          import android.text.InputType
+          import android.util.TypedValue
+          import android.view.Gravity
+          import android.view.View
+          import android.view.ViewGroup
+          import android.webkit.CookieManager
+          import android.webkit.JavascriptInterface
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebSettings
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.Button
+          import android.widget.EditText
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import androidx.appcompat.app.AppCompatActivity
+          import org.json.JSONArray
+          import kotlin.random.Random
+
+          class MainActivity : AppCompatActivity() {
+
+              private lateinit var webView: WebView
+              private lateinit var loginLayout: LinearLayout
+              private lateinit var usernameInput: EditText
+              private lateinit var passwordInput: EditText
+              private lateinit var loginBtn: Button
+              private lateinit var toggleAuthBtn: Button
+              private lateinit var searchInput: EditText
+              private lateinit var startBtn: Button
+              private lateinit var stopBtn: Button
+              private lateinit var statusText: TextView
+
+              private val handler = Handler(Looper.getMainLooper())
+              private var isRunning = false
+
+              private val accountQueue = mutableListOf<String>()
+              private val processedAccounts = mutableSetOf<String>()
+              private var currentAccountIndex = 0
+
+              private val likePattern = intArrayOf(1, 2, 3)
+              private var patternStepIndex = 0
+
+              private val messageToSend = "Здравствуйте можно с Вами связаться?"
+
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  val rootLayout = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      layoutParams = ViewGroup.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT,
+                          ViewGroup.LayoutParams.MATCH_PARENT
+                      )
+                      setBackgroundColor(Color.parseColor("#121212"))
+                  }
+
+                  loginLayout = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      setPadding(dp(8), dp(6), dp(8), dp(4))
+                      gravity = Gravity.CENTER_VERTICAL
+                      setBackgroundColor(Color.parseColor("#1E1E2E"))
+                  }
+
+                  usernameInput = EditText(this).apply {
+                      hint = "Логин Instagram"
+                      setHintTextColor(Color.parseColor("#888899"))
+                      setTextColor(Color.WHITE)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                      setSingleLine(true)
+                  }
+
+                  passwordInput = EditText(this).apply {
+                      hint = "Пароль"
+                      setHintTextColor(Color.parseColor("#888899"))
+                      setTextColor(Color.WHITE)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                      inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                      setSingleLine(true)
+                  }
+
+                  loginBtn = Button(this).apply {
+                      text = "Войти"
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      setBackgroundColor(Color.parseColor("#3B82F6"))
+                      setTextColor(Color.WHITE)
+                      setOnClickListener { performAutoLogin() }
+                  }
+
+                  loginLayout.addView(usernameInput)
+                  loginLayout.addView(passwordInput)
+                  loginLayout.addView(loginBtn)
+
+                  val controlBar = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      setPadding(dp(8), dp(6), dp(8), dp(6))
+                      gravity = Gravity.CENTER_VERTICAL
+                      setBackgroundColor(Color.parseColor("#1E1E2E"))
+                  }
+
+                  searchInput = EditText(this).apply {
+                      hint = "Поиск (напр. бухгалтер)"
+                      setText("бухгалтер")
+                      setHintTextColor(Color.parseColor("#888899"))
+                      setTextColor(Color.WHITE)
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                      setSingleLine(true)
+                  }
+
+                  startBtn = Button(this).apply {
+                      text = "▶ СТАРТ"
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                      typeface = Typeface.DEFAULT_BOLD
+                      setBackgroundColor(Color.parseColor("#10B981"))
+                      setTextColor(Color.WHITE)
+                      setOnClickListener { onStartClicked() }
+                  }
+
+                  stopBtn = Button(this).apply {
+                      text = "⏹ СТОП"
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                      typeface = Typeface.DEFAULT_BOLD
+                      setBackgroundColor(Color.parseColor("#EF4444"))
+                      setTextColor(Color.WHITE)
+                      isEnabled = false
+                      setOnClickListener { onStopClicked() }
+                  }
+
+                  toggleAuthBtn = Button(this).apply {
+                      text = "🔑"
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      setBackgroundColor(Color.parseColor("#374151"))
+                      setTextColor(Color.WHITE)
+                      layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
+                      setOnClickListener {
+                          loginLayout.visibility =
+                              if (loginLayout.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                      }
+                  }
+
+                  controlBar.addView(searchInput)
+                  controlBar.addView(startBtn)
+                  controlBar.addView(stopBtn)
+                  controlBar.addView(toggleAuthBtn)
+
+                  statusText = TextView(this).apply {
+                      text = "Статус: Готов. Войдите в аккаунт, введите запрос в поиск и нажмите СТАРТ."
+                      setTextColor(Color.parseColor("#E5E7EB"))
+                      setBackgroundColor(Color.parseColor("#111827"))
+                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                      setPadding(dp(10), dp(6), dp(10), dp(6))
+                  }
+
+                  webView = WebView(this).apply {
+                      layoutParams = LinearLayout.LayoutParams(
+                          ViewGroup.LayoutParams.MATCH_PARENT,
+                          0,
+                          1f
+                      )
+                  }
+                  setupWebView()
+
+                  rootLayout.addView(loginLayout)
+                  rootLayout.addView(controlBar)
+                  rootLayout.addView(statusText)
+                  rootLayout.addView(webView)
+                  setContentView(rootLayout)
+
+                  webView.loadUrl("https://www.instagram.com/")
+              }
+
+              @SuppressLint("SetJavaScriptEnabled")
+              private fun setupWebView() {
+                  val cookieManager = CookieManager.getInstance()
+                  cookieManager.setAcceptCookie(true)
+                  cookieManager.setAcceptThirdPartyCookies(webView, true)
+
+                  webView.settings.apply {
+                      javaScriptEnabled = true
+                      domStorageEnabled = true
+                      databaseEnabled = true
+                      useWideViewPort = true
+                      loadWithOverviewMode = true
+                      userAgentString =
+                          "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                      mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                  }
+
+                  webView.addJavascriptInterface(BotJsBridge(), "AndroidBot")
+                  webView.webChromeClient = WebChromeClient()
+                  webView.webViewClient = object : WebViewClient() {
+                      override fun shouldOverrideUrlLoading(
+                          view: WebView?,
+                          request: WebResourceRequest?
+                      ): Boolean {
+                          val url = request?.url?.toString() ?: return false
+                          if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                              return true
+                          }
+                          return false
+                      }
+                  }
+              }
+
+              private fun performAutoLogin() {
+                  val user = usernameInput.text.toString().trim()
+                  val pass = passwordInput.text.toString().trim()
+                  if (user.isEmpty() || pass.isEmpty()) {
+                      updateStatus("Введите логин и пароль выше или авторизуйтесь прямо на экране Instagram.")
+                      return
+                  }
+
+                  updateStatus("Вводим логин и пароль...")
+                  val escapedUser = escapeJs(user)
+                  val escapedPass = escapeJs(pass)
+
+                  val js = """
+                      (function() {
+                          function setNativeValue(el, value) {
+                              const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                              valueSetter.call(el, value);
+                              el.dispatchEvent(new Event('input', { bubbles: true }));
+                              el.dispatchEvent(new Event('change', { bubbles: true }));
+                          }
+                          const u = document.querySelector('input[name="username"]');
+                          const p = document.querySelector('input[name="password"]');
+                          if (u && p) {
+                              u.focus();
+                              setNativeValue(u, '$escapedUser');
+                              p.focus();
+                              setNativeValue(p, '$escapedPass');
+                              setTimeout(() => {
+                                  const btn = document.querySelector('button[type="submit"]') ||
+                                              Array.from(document.querySelectorAll('div[role="button"], button'))
+                                                   .find(b => /войти|log in/i.test(b.innerText));
+                                  if (btn) btn.click();
+                              }, 600);
+                              return 'OK';
+                          }
+                          return 'NO_FIELDS';
+                      })();
+                  """.trimIndent()
+
+                  webView.evaluateJavascript(js) { res ->
+                      if (res?.contains("OK") == true) {
+                          updateStatus("Выполняется вход... После входа панель логина можно свернуть кнопкой 🔑.")
+                          handler.postDelayed({
+                              loginLayout.visibility = View.GONE
+                          }, 4000)
+                      } else {
+                          updateStatus("Поля входа не найдены. Если вы уже вошли, сверните панель кнопкой 🔑.")
+                      }
+                  }
+              }
+
+              private fun onStartClicked() {
+                  if (isRunning) return
+                  isRunning = true
+                  startBtn.isEnabled = false
+                  stopBtn.isEnabled = true
+                  loginLayout.visibility = View.GONE
+
+                  val query = searchInput.text.toString().trim().ifEmpty { "бухгалтер" }
+                  val nextLikes = likePattern[patternStepIndex % likePattern.size]
+                  updateStatus("▶ Запущено! Поиск «$query»... (След. аккаунт: $nextLikes лайк(а))")
+
+                  openSearchAndCollectAccounts(query)
+              }
+
+              private fun onStopClicked() {
+                  isRunning = false
+                  handler.removeCallbacksAndMessages(null)
+                  startBtn.isEnabled = true
+                  stopBtn.isEnabled = false
+                  updateStatus("⏹ Остановлено пользователем. Нажмите СТАРТ для продолжения.")
+              }
+
+              private fun openSearchAndCollectAccounts(query: String) {
+                  if (!isRunning) return
+
+                  collectSearchAccountsFromPage { existingList ->
+                      if (!isRunning) return@collectSearchAccountsFromPage
+
+                      val newAccounts = existingList.filter { it !in processedAccounts }
+                      if (newAccounts.isNotEmpty()) {
+                          accountQueue.clear()
+                          accountQueue.addAll(newAccounts)
+                          currentAccountIndex = 0
+                          updateStatus("Найдено аккаунтов в списке: ${accountQueue.size}. Начинаем обход сверху вниз...")
+                          processNextAccountInQueue()
+                      } else {
+                          updateStatus("Открываем панель поиска и вводим «$query»...")
+                          webView.loadUrl("https://www.instagram.com/explore/")
+                          handler.postDelayed({
+                              if (!isRunning) return@postDelayed
+                              typeSearchQueryInWebView(query)
+                          }, 4000)
+                      }
+                  }
+              }
+
+              private fun typeSearchQueryInWebView(query: String) {
+                  if (!isRunning) return
+                  val escapedQuery = escapeJs(query)
+
+                  val js = """
+                      (function() {
+                          function setNativeValue(el, value) {
+                              const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                              valueSetter.call(el, value);
+                              el.dispatchEvent(new Event('input', { bubbles: true }));
+                              el.dispatchEvent(new Event('change', { bubbles: true }));
+                          }
+                          const searchBtn = document.querySelector('a[href*="/explore/"], svg[aria-label*="Поиск"], svg[aria-label*="Search"]');
+                          if (searchBtn && !document.querySelector('input[placeholder*="Поиск"], input[placeholder*="Search"], input[type="search"]')) {
+                              const clickable = searchBtn.closest('a, button, div[role="button"]') || searchBtn;
+                              clickable.click();
+                          }
+                          setTimeout(() => {
+                              const input = document.querySelector('input[placeholder*="Поиск"], input[placeholder*="Search"], input[aria-label*="Поиск"], input[aria-label*="Search"], input[type="search"], input[type="text"]');
+                              if (input) {
+                                  input.focus();
+                                  setNativeValue(input, '$escapedQuery');
+                              }
+                          }, 800);
+                      })();
+                  """.trimIndent()
+
+                  webView.evaluateJavascript(js, null)
+
+                  handler.postDelayed({
+                      if (!isRunning) return@postDelayed
+                      collectSearchAccountsFromPage { accounts ->
+                          if (!isRunning) return@collectSearchAccountsFromPage
+                          val filtered = accounts.filter { it !in processedAccounts }
+                          if (filtered.isEmpty()) {
+                              updateStatus("Не удалось найти новые аккаунты. Откройте поиск в Instagram вручную, введите запрос и нажмите СТАРТ.")
+                              onStopClicked()
+                          } else {
+                              accountQueue.clear()
+                              accountQueue.addAll(filtered)
+                              currentAccountIndex = 0
+                              updateStatus("Собрано аккаунтов сверху вниз: ${accountQueue.size}. Заходим в первый...")
+                              processNextAccountInQueue()
+                          }
+                      }
+                  }, 4800)
+              }
+
+              private fun collectSearchAccountsFromPage(callback: (List<String>) -> Unit) {
+                  val js = """
+                      (function() {
+                          const excluded = new Set(['explore', 'reels', 'direct', 'accounts', 'p', 'reel', 'stories', 'tv', 'about', 'legal', 'privacy']);
+                          const anchors = Array.from(document.querySelectorAll('a[href^="/"]'));
+                          const items = [];
+                          const seen = new Set();
+
+                          for (const a of anchors) {
+                              const href = a.getAttribute('href');
+                              if (!href) continue;
+                              const clean = href.split('?')[0].replace(/^\/+|\/+$/g, '');
+                              if (!clean || clean.includes('/')) continue;
+                              if (excluded.has(clean.toLowerCase())) continue;
+
+                              const rect = a.getBoundingClientRect();
+                              if (rect.width === 0 || rect.height === 0) continue;
+
+                              const fullUrl = 'https://www.instagram.com/' + clean + '/';
+                              if (!seen.has(fullUrl)) {
+                                  seen.add(fullUrl);
+                                  items.push({ url: fullUrl, top: rect.top });
+                              }
+                          }
+                          items.sort((a, b) => a.top - b.top);
+                          return JSON.stringify(items.map(i => i.url));
+                      })();
+                  """.trimIndent()
+
+                  webView.evaluateJavascript(js) { rawJson ->
+                      val list = mutableListOf<String>()
+                      try {
+                          val unescaped = rawJson
+                              ?.trim()
+                              ?.removeSurrounding("\"")
+                              ?.replace("\\\"", "\"")
+                              ?.replace("\\\\", "\\") ?: "[]"
+                          val arr = JSONArray(unescaped)
+                          for (i in 0 until arr.length()) {
+                              list.add(arr.getString(i))
+                          }
+                      } catch (_: Exception) {
+                      }
+                      callback(list)
+                  }
+              }
+
+              private fun processNextAccountInQueue() {
+                  if (!isRunning) return
+
+                  if (currentAccountIndex >= accountQueue.size) {
+                      val query = searchInput.text.toString().trim().ifEmpty { "бухгалтер" }
+                      updateStatus("Список пройден. Возвращаемся в поиск за новыми аккаунтами «$query»...")
+                      openSearchAndCollectAccounts(query)
+                      return
+                  }
+
+                  val accountUrl = accountQueue[currentAccountIndex]
+                  currentAccountIndex++
+
+                  val likesToPut = likePattern[patternStepIndex % likePattern.size]
+                  patternStepIndex++
+
+                  updateStatus("Аккаунт [$currentAccountIndex/${accountQueue.size}]: открываем профиль (План: $likesToPut лайк(а) + сообщение)...")
+                  webView.loadUrl(accountUrl)
+
+                  handler.postDelayed({
+                      if (!isRunning) return@postDelayed
+                      collectLatestPostsAndLike(accountUrl, likesToPut)
+                  }, randomDelay(4200, 5500))
+              }
+
+              private fun collectLatestPostsAndLike(accountUrl: String, likesCount: Int) {
+                  if (!isRunning) return
+
+                  val js = """
+                      (function() {
+                          const links = Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'));
+                          const urls = [];
+                          for (const l of links) {
+                              const h = l.href;
+                              if (h && !urls.includes(h)) {
+                                  urls.push(h);
+                              }
+                              if (urls.length >= $likesCount) break;
+                          }
+                          return JSON.stringify(urls);
+                      })();
+                  """.trimIndent()
+
+                  webView.evaluateJavascript(js) { rawJson ->
+                      if (!isRunning) return@evaluateJavascript
+                      val postUrls = mutableListOf<String>()
+                      try {
+                          val unescaped = rawJson
+                              ?.trim()
+                              ?.removeSurrounding("\"")
+                              ?.replace("\\\"", "\"")
+                              ?.replace("\\\\", "\\") ?: "[]"
+                          val arr = JSONArray(unescaped)
+                          for (i in 0 until arr.length()) {
+                              postUrls.add(arr.getString(i))
+                          }
+                      } catch (_: Exception) {
+                      }
+
+                      if (postUrls.isEmpty()) {
+                          updateStatus("Постов нет (или профиль закрыт). Переходим сразу к отправке сообщения...")
+                          openMessageAndSend(accountUrl)
+                      } else {
+                          likePostsSequentially(accountUrl, postUrls, 0)
+                      }
+                  }
+              }
+
+              private fun likePostsSequentially(
+                  accountUrl: String,
+                  postUrls: List<String>,
+                  index: Int
+              ) {
+                  if (!isRunning) return
+
+                  if (index >= postUrls.size) {
+                      updateStatus("Поставлено лай
