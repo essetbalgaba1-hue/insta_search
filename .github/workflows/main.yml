@@ -1,0 +1,47 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Скачивание файлов проекта
+        uses: actions/checkout@v4
+
+      - name: Установка Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Запуск скрипта создания структуры Android-проекта
+        run: |
+          for f in *.py; do
+            if [ -f "$f" ]; then python "$f"; fi
+          done
+
+      - name: Установка Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Сборка APK-файла
+        run: |
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          else
+            gradle wrapper --gradle-version 8.4
+            chmod +x gradlew
+            ./gradlew assembleDebug
+          fi
+
+      - name: Выгрузка готового APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ready-Android-APK
+          path: '**/build/outputs/apk/debug/*.apk'
