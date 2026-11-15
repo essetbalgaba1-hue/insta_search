@@ -19,8 +19,13 @@ jobs:
 
       - name: Запуск скрипта создания структуры Android-проекта
         run: |
-          for f in *.py; do
-            if [ -f "$f" ]; then python "$f"; fi
+          echo "Файлы в репозитории:"
+          ls -la
+          for f in *.py *.py.txt *.ru; do
+            if [ -f "$f" ]; then
+              echo "Запускаем скрипт: $f"
+              python3 "$f"
+            fi
           done
 
       - name: Установка Java JDK 17
@@ -29,16 +34,24 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Сборка APK-файла
+      - name: Поиск папки проекта и сборка APK-файла
         run: |
-          if [ -f "gradlew" ]; then
-            chmod +x gradlew
-            ./gradlew assembleDebug
-          else
-            gradle wrapper --gradle-version 8.4
-            chmod +x gradlew
-            ./gradlew assembleDebug
+          GRADLE_FILE=$(find . -maxdepth 3 -name "settings.gradle*" | head -n 1)
+          if [ -z "$GRADLE_FILE" ]; then
+            GRADLE_FILE=$(find . -maxdepth 3 -name "build.gradle*" | head -n 1)
           fi
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "ОШИБКА: Скрипт не создал файлы build.gradle или settings.gradle!"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$GRADLE_FILE")
+          echo "Переходим в папку проекта: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
+          if [ ! -f "gradlew" ]; then
+            gradle wrapper --gradle-version 8.4
+          fi
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Выгрузка готового APK
         uses: actions/upload-artifact@v4
