@@ -1,19 +1,30 @@
-name: Build Android APK
+name: Build OLX Automator APK
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ "main", "master" ]
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
-  build:
+  build-apk:
     runs-on: ubuntu-latest
-    steps:
-      - name: Создание структуры проекта и очистка кода
-        run: |
-          mkdir -p InstaBuhBot_Android/app/src/main/java/com/example/instabuhbot
 
-          cat << 'EOF' > InstaBuhBot_Android/settings.gradle
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Prepare all project files automatically
+        run: |
+          rm -rf app build.gradle settings.gradle gradle.properties
+          mkdir -p app/src/main/java/com/olx/automator
+
+          cat << 'EOF' > settings.gradle
           pluginManagement {
               repositories {
                   google()
@@ -28,64 +39,52 @@ jobs:
                   mavenCentral()
               }
           }
-          rootProject.name = "InstaBuhBot"
+          rootProject.name = "OLXAutomator"
           include ':app'
           EOF
 
-          cat << 'EOF' > InstaBuhBot_Android/build.gradle
+          cat << 'EOF' > build.gradle
           plugins {
-              id 'com.android.application' version '8.2.0' apply false
-              id 'org.jetbrains.kotlin.android' version '1.9.20' apply false
+              id 'com.android.application' version '8.2.2' apply false
           }
           EOF
 
-          cat << 'EOF' > InstaBuhBot_Android/gradle.properties
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          kotlin.code.style=official
-          android.nonTransitiveRClass=true
-          EOF
+          echo "android.useAndroidX=true" > gradle.properties
 
-          cat << 'EOF' > InstaBuhBot_Android/app/build.gradle
+          cat << 'EOF' > app/build.gradle
           plugins {
               id 'com.android.application'
-              id 'org.jetbrains.kotlin.android'
           }
 
           android {
-              namespace 'com.example.instabuhbot'
+              namespace 'com.olx.automator'
               compileSdk 34
 
               defaultConfig {
-                  applicationId "com.example.instabuhbot"
+                  applicationId "com.olx.automator"
                   minSdk 24
                   targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
+                  versionCode 3
+                  versionName "1.2"
               }
 
               buildTypes {
-                  release {
+                  debug {
                       minifyEnabled false
                   }
               }
+
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
               }
-              kotlinOptions {
-                  jvmTarget = '17'
-              }
           }
 
           dependencies {
-              implementation 'androidx.core:core-ktx:1.12.0'
-              implementation 'androidx.appcompat:appcompat:1.6.1'
-              implementation 'com.google.android.material:material:1.11.0'
           }
           EOF
 
-          cat << 'EOF' > InstaBuhBot_Android/app/src/main/AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
@@ -94,10 +93,11 @@ jobs:
 
               <application
                   android:allowBackup="true"
-                  android:label="InstaBuhBot"
-                  android:supportsRtl="true"
+                  android:icon="@android:drawable/sym_def_app_icon"
+                  android:label="OLX Помощник"
                   android:usesCleartextTraffic="true"
-                  android:theme="@style/Theme.AppCompat.NoActionBar">
+                  android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+
                   <activity
                       android:name=".MainActivity"
                       android:configChanges="orientation|screenSize|keyboardHidden"
@@ -108,683 +108,480 @@ jobs:
                       </intent-filter>
                   </activity>
               </application>
+
           </manifest>
           EOF
 
-          cat << 'EOF' > InstaBuhBot_Android/app/src/main/java/com/example/instabuhbot/MainActivity.kt
-          package com.example.instabuhbot
+          cat << 'EOF' > app/src/main/java/com/olx/automator/MainActivity.java
+          package com.olx.automator;
 
-          import android.annotation.SuppressLint
-          import android.graphics.Color
-          import android.graphics.Typeface
-          import android.os.Bundle
-          import android.os.Handler
-          import android.os.Looper
-          import android.text.InputType
-          import android.util.TypedValue
-          import android.view.Gravity
-          import android.view.View
-          import android.view.ViewGroup
-          import android.webkit.CookieManager
-          import android.webkit.JavascriptInterface
-          import android.webkit.WebChromeClient
-          import android.webkit.WebResourceRequest
-          import android.webkit.WebSettings
-          import android.webkit.WebView
-          import android.webkit.WebViewClient
-          import android.widget.Button
-          import android.widget.EditText
-          import android.widget.LinearLayout
-          import android.widget.TextView
-          import androidx.appcompat.app.AppCompatActivity
-          import org.json.JSONArray
-          import kotlin.random.Random
+          import android.annotation.SuppressLint;
+          import android.app.Activity;
+          import android.content.ClipData;
+          import android.content.ClipboardManager;
+          import android.content.Context;
+          import android.content.SharedPreferences;
+          import android.graphics.Color;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.text.InputType;
+          import android.view.Gravity;
+          import android.view.View;
+          import android.view.WindowManager;
+          import android.webkit.CookieManager;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.WebSettings;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.widget.Button;
+          import android.widget.EditText;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
 
-          class MainActivity : AppCompatActivity() {
+          import org.json.JSONArray;
 
-              private lateinit var webView: WebView
-              private lateinit var loginLayout: LinearLayout
-              private lateinit var usernameInput: EditText
-              private lateinit var passwordInput: EditText
-              private lateinit var loginBtn: Button
-              private lateinit var toggleAuthBtn: Button
-              private lateinit var searchInput: EditText
-              private lateinit var startBtn: Button
-              private lateinit var stopBtn: Button
-              private lateinit var statusText: TextView
+          import java.net.URLEncoder;
+          import java.util.ArrayList;
+          import java.util.HashSet;
+          import java.util.List;
+          import java.util.Random;
+          import java.util.Set;
 
-              private val handler = Handler(Looper.getMainLooper())
-              private var isRunning = false
+          public class MainActivity extends Activity {
 
-              private val accountQueue = mutableListOf<String>()
-              private val processedAccounts = mutableSetOf<String>()
-              private var currentAccountIndex = 0
+              private WebView webView;
+              private EditText etQuery;
+              private EditText etMessage;
+              private TextView tvStatus;
+              private Button btnStart;
+              private Button btnStop;
+              private Button btnTogglePanel;
+              private LinearLayout settingsContainer;
 
-              private val likePattern = intArrayOf(1, 2, 3)
-              private var patternStepIndex = 0
+              private boolean isRunning = false;
+              private int currentPage = 1;
+              private int sentCount = 0;
 
-              private val messageToSend = "Здравствуйте можно с Вами связаться?"
+              private final List<String> adQueue = new ArrayList<>();
+              private String currentAdUrl = "";
 
-              @SuppressLint("SetJavaScriptEnabled")
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
+              private enum State { IDLE, LOADING_SEARCH, LOADING_AD, WAITING_NEXT }
+              private State currentState = State.IDLE;
 
-                  val rootLayout = LinearLayout(this).apply {
-                      orientation = LinearLayout.VERTICAL
-                      layoutParams = ViewGroup.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT,
-                          ViewGroup.LayoutParams.MATCH_PARENT
-                      )
-                      setBackgroundColor(Color.parseColor("#121212"))
-                  }
+              private final Handler handler = new Handler(Looper.getMainLooper());
+              private final Random random = new Random();
+              private SharedPreferences prefs;
+              private Set<String> visitedAds;
 
-                  loginLayout = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      setPadding(dp(8), dp(6), dp(8), dp(4))
-                      gravity = Gravity.CENTER_VERTICAL
-                      setBackgroundColor(Color.parseColor("#1E1E2E"))
-                  }
-
-                  usernameInput = EditText(this).apply {
-                      hint = "Логин Instagram"
-                      setHintTextColor(Color.parseColor("#888899"))
-                      setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                      setSingleLine(true)
-                  }
-
-                  passwordInput = EditText(this).apply {
-                      hint = "Пароль"
-                      setHintTextColor(Color.parseColor("#888899"))
-                      setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                      setSingleLine(true)
-                  }
-
-                  loginBtn = Button(this).apply {
-                      text = "Войти"
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                      setBackgroundColor(Color.parseColor("#3B82F6"))
-                      setTextColor(Color.WHITE)
-                      setOnClickListener { performAutoLogin() }
-                  }
-
-                  loginLayout.addView(usernameInput)
-                  loginLayout.addView(passwordInput)
-                  loginLayout.addView(loginBtn)
-
-                  val controlBar = LinearLayout(this).apply {
-                      orientation = LinearLayout.HORIZONTAL
-                      setPadding(dp(8), dp(6), dp(8), dp(6))
-                      gravity = Gravity.CENTER_VERTICAL
-                      setBackgroundColor(Color.parseColor("#1E1E2E"))
-                  }
-
-                  searchInput = EditText(this).apply {
-                      hint = "Поиск (напр. бухгалтер)"
-                      setText("бухгалтер")
-                      setHintTextColor(Color.parseColor("#888899"))
-                      setTextColor(Color.WHITE)
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                      layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                      setSingleLine(true)
-                  }
-
-                  startBtn = Button(this).apply {
-                      text = "▶ СТАРТ"
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      typeface = Typeface.DEFAULT_BOLD
-                      setBackgroundColor(Color.parseColor("#10B981"))
-                      setTextColor(Color.WHITE)
-                      setOnClickListener { onStartClicked() }
-                  }
-
-                  stopBtn = Button(this).apply {
-                      text = "⏹ СТОП"
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                      typeface = Typeface.DEFAULT_BOLD
-                      setBackgroundColor(Color.parseColor("#EF4444"))
-                      setTextColor(Color.WHITE)
-                      isEnabled = false
-                      setOnClickListener { onStopClicked() }
-                  }
-
-                  toggleAuthBtn = Button(this).apply {
-                      text = "🔑"
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                      setBackgroundColor(Color.parseColor("#374151"))
-                      setTextColor(Color.WHITE)
-                      layoutParams = LinearLayout.LayoutParams(dp(42), ViewGroup.LayoutParams.WRAP_CONTENT)
-                      setOnClickListener {
-                          loginLayout.visibility =
-                              if (loginLayout.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                      }
-                  }
-
-                  controlBar.addView(searchInput)
-                  controlBar.addView(startBtn)
-                  controlBar.addView(stopBtn)
-                  controlBar.addView(toggleAuthBtn)
-
-                  statusText = TextView(this).apply {
-                      text = "Статус: Готов. Войдите в аккаунт, введите запрос в поиск и нажмите СТАРТ."
-                      setTextColor(Color.parseColor("#E5E7EB"))
-                      setBackgroundColor(Color.parseColor("#111827"))
-                      setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-                      setPadding(dp(10), dp(6), dp(10), dp(6))
-                  }
-
-                  webView = WebView(this).apply {
-                      layoutParams = LinearLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT,
-                          0,
-                          1f
-                      )
-                  }
-                  setupWebView()
-
-                  rootLayout.addView(loginLayout)
-                  rootLayout.addView(controlBar)
-                  rootLayout.addView(statusText)
-                  rootLayout.addView(webView)
-                  setContentView(rootLayout)
-
-                  webView.loadUrl("https://www.instagram.com/")
-              }
+              private static final String DEFAULT_MESSAGE =
+                      "Здравствуйте, меня зовут Мирас. Я программист, более 7 лет занимаюсь на удалёнке, " +
+                      "помогаю людям восстанавливать файлы, а также настройка принтеров, активация офисов, " +
+                      "экселей, а также удаление вирусов и установка антивирусов и так далее. " +
+                      "Чем могу вам помочь? Возможно, вам нужно какие-то проблемы решить. " +
+                      "Если что, пишите, можем обсудить онлайн за договорную сумму. " +
+                      "После работы оплата производится. Мой номер телефона: 8 771 608 04 17. " +
+                      "Мирас, с уважением.";
 
               @SuppressLint("SetJavaScriptEnabled")
-              private fun setupWebView() {
-                  val cookieManager = CookieManager.getInstance()
-                  cookieManager.setAcceptCookie(true)
-                  cookieManager.setAcceptThirdPartyCookies(webView, true)
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-                  webView.settings.apply {
-                      javaScriptEnabled = true
-                      domStorageEnabled = true
-                      databaseEnabled = true
-                      useWideViewPort = true
-                      loadWithOverviewMode = true
-                      userAgentString =
-                          "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-                      mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                  }
+                  prefs = getSharedPreferences("olx_bot_prefs", Context.MODE_PRIVATE);
+                  visitedAds = new HashSet<>(prefs.getStringSet("visited_urls", new HashSet<>()));
 
-                  webView.addJavascriptInterface(BotJsBridge(), "AndroidBot")
-                  webView.webChromeClient = WebChromeClient()
-                  webView.webViewClient = object : WebViewClient() {
-                      override fun shouldOverrideUrlLoading(
-                          view: WebView?,
-                          request: WebResourceRequest?
-                      ): Boolean {
-                          val url = request?.url?.toString() ?: return false
-                          if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                              return true
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setBackgroundColor(Color.parseColor("#F2F4F5"));
+
+                  settingsContainer = new LinearLayout(this);
+                  settingsContainer.setOrientation(LinearLayout.VERTICAL);
+                  settingsContainer.setPadding(24, 20, 24, 12);
+                  settingsContainer.setBackgroundColor(Color.parseColor("#FFFFFF"));
+
+                  etQuery = new EditText(this);
+                  etQuery.setHint("Кого ищем? (например: бухгалтер)");
+                  etQuery.setText(prefs.getString("saved_query", "бухгалтер"));
+                  etQuery.setSingleLine(true);
+                  settingsContainer.addView(etQuery);
+
+                  etMessage = new EditText(this);
+                  etMessage.setHint("Текст сообщения...");
+                  etMessage.setText(prefs.getString("saved_message", DEFAULT_MESSAGE));
+                  etMessage.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+                  etMessage.setLines(3);
+                  etMessage.setMaxLines(4);
+                  etMessage.setGravity(Gravity.TOP | Gravity.START);
+                  settingsContainer.addView(etMessage);
+
+                  root.addView(settingsContainer);
+
+                  LinearLayout controlsRow = new LinearLayout(this);
+                  controlsRow.setOrientation(LinearLayout.HORIZONTAL);
+                  controlsRow.setPadding(24, 8, 24, 8);
+                  controlsRow.setBackgroundColor(Color.parseColor("#E8ECEF"));
+
+                  LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                          0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+                  btnParams.setMargins(6, 0, 6, 0);
+
+                  btnStart = new Button(this);
+                  btnStart.setText("СТАРТ");
+                  btnStart.setBackgroundColor(Color.parseColor("#23E5DB"));
+                  btnStart.setTextColor(Color.parseColor("#002F34"));
+                  btnStart.setLayoutParams(btnParams);
+
+                  btnStop = new Button(this);
+                  btnStop.setText("СТОП");
+                  btnStop.setBackgroundColor(Color.parseColor("#FF5636"));
+                  btnStop.setTextColor(Color.WHITE);
+                  btnStop.setEnabled(false);
+                  btnStop.setLayoutParams(btnParams);
+
+                  btnTogglePanel = new Button(this);
+                  btnTogglePanel.setText("Поля ▲");
+                  btnTogglePanel.setLayoutParams(btnParams);
+
+                  controlsRow.addView(btnStart);
+                  controlsRow.addView(btnStop);
+                  controlsRow.addView(btnTogglePanel);
+                  root.addView(controlsRow);
+
+                  tvStatus = new TextView(this);
+                  tvStatus.setText("1. Войдите в аккаунт OLX ниже. 2. Нажмите СТАРТ.");
+                  tvStatus.setPadding(24, 12, 24, 12);
+                  tvStatus.setBackgroundColor(Color.parseColor("#002F34"));
+                  tvStatus.setTextColor(Color.WHITE);
+                  tvStatus.setTextSize(13f);
+                  root.addView(tvStatus);
+
+                  webView = new WebView(this);
+                  LinearLayout.LayoutParams webParams = new LinearLayout.LayoutParams(
+                          LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f);
+                  webView.setLayoutParams(webParams);
+
+                  WebSettings ws = webView.getSettings();
+                  ws.setJavaScriptEnabled(true);
+                  ws.setDomStorageEnabled(true);
+                  ws.setDatabaseEnabled(true);
+                  ws.setUserAgentString("Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+
+                  CookieManager cm = CookieManager.getInstance();
+                  cm.setAcceptCookie(true);
+                  cm.setAcceptThirdPartyCookies(webView, true);
+
+                  webView.addJavascriptInterface(new WebAppInterface(), "AndroidBridge");
+                  webView.setWebChromeClient(new WebChromeClient());
+                  webView.setWebViewClient(new WebViewClient() {
+                      @Override
+                      public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                          String url = request.getUrl().toString();
+                          if (url.startsWith("http://") || url.startsWith("https://")) {
+                              return false;
                           }
-                          return false
+                          return true;
                       }
-                  }
-              }
 
-              private fun performAutoLogin() {
-                  val user = usernameInput.text.toString().trim()
-                  val pass = passwordInput.text.toString().trim()
-                  if (user.isEmpty() || pass.isEmpty()) {
-                      updateStatus("Введите логин и пароль выше или авторизуйтесь прямо на экране Instagram.")
-                      return
-                  }
+                      @Override
+                      public void onPageFinished(WebView view, String url) {
+                          super.onPageFinished(view, url);
+                          CookieManager.getInstance().flush();
+                          if (!isRunning) return;
 
-                  updateStatus("Вводим логин и пароль...")
-                  val escapedUser = escapeJs(user)
-                  val escapedPass = escapeJs(pass)
-
-                  val js = """
-                      (function() {
-                          function setNativeValue(el, value) {
-                              const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                              valueSetter.call(el, value);
-                              el.dispatchEvent(new Event('input', { bubbles: true }));
-                              el.dispatchEvent(new Event('change', { bubbles: true }));
+                          if (currentState == State.LOADING_SEARCH) {
+                              updateStatus("Сканирую организации на стр. " + currentPage + "...");
+                              handler.postDelayed(() -> injectSearchScanner(), 3500);
+                          } else if (currentState == State.LOADING_AD) {
+                              updateStatus("Открыта анкета. Ищу кнопку сообщения...");
+                              handler.postDelayed(() -> injectAutomation(), 3000);
                           }
-                          const u = document.querySelector('input[name="username"]');
-                          const p = document.querySelector('input[name="password"]');
-                          if (u && p) {
-                              u.focus();
-                              setNativeValue(u, '$escapedUser');
-                              p.focus();
-                              setNativeValue(p, '$escapedPass');
-                              setTimeout(() => {
-                                  const btn = document.querySelector('button[type="submit"]') ||
-                                              Array.from(document.querySelectorAll('div[role="button"], button'))
-                                                   .find(b => /войти|log in/i.test(b.innerText));
-                                  if (btn) btn.click();
-                              }, 600);
-                              return 'OK';
-                          }
-                          return 'NO_FIELDS';
-                      })();
-                  """.trimIndent()
+                      }
+                  });
 
-                  webView.evaluateJavascript(js) { res ->
-                      if (res?.contains("OK") == true) {
-                          updateStatus("Выполняется вход... После входа панель логина можно свернуть кнопкой 🔑.")
-                          handler.postDelayed({
-                              loginLayout.visibility = View.GONE
-                          }, 4000)
+                  root.addView(webView);
+                  setContentView(root);
+
+                  btnTogglePanel.setOnClickListener(v -> {
+                      if (settingsContainer.getVisibility() == View.VISIBLE) {
+                          settingsContainer.setVisibility(View.GONE);
+                          btnTogglePanel.setText("Поля ▼");
                       } else {
-                          updateStatus("Поля входа не найдены. Если вы уже вошли, сверните панель кнопкой 🔑.")
+                          settingsContainer.setVisibility(View.VISIBLE);
+                          btnTogglePanel.setText("Поля ▲");
+                      }
+                  });
+
+                  btnStart.setOnClickListener(v -> startBot());
+                  btnStop.setOnClickListener(v -> stopBot("Остановлено пользователем."));
+
+                  webView.loadUrl("https://www.olx.kz/myaccount/");
+              }
+
+              private void startBot() {
+                  String query = etQuery.getText().toString().trim();
+                  String msg = etMessage.getText().toString().trim();
+
+                  if (query.isEmpty() || msg.isEmpty()) {
+                      updateStatus("Ошибка: заполните поисковый запрос и текст сообщения!");
+                      return;
+                  }
+
+                  prefs.edit()
+                          .putString("saved_query", query)
+                          .putString("saved_message", msg)
+                          .apply();
+
+                  ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                  ClipData clip = ClipData.newPlainText("olx_msg", msg);
+                  clipboard.setPrimaryClip(clip);
+
+                  isRunning = true;
+                  currentPage = 1;
+                  adQueue.clear();
+
+                  btnStart.setEnabled(false);
+                  btnStop.setEnabled(true);
+                  settingsContainer.setVisibility(View.GONE);
+                  btnTogglePanel.setText("Поля ▼");
+
+                  loadSearchPage();
+              }
+
+              private void stopBot(String reason) {
+                  isRunning = false;
+                  currentState = State.IDLE;
+                  handler.removeCallbacksAndMessages(null);
+                  btnStart.setEnabled(true);
+                  btnStop.setEnabled(false);
+                  updateStatus(reason + " (Отправлено за сессию: " + sentCount + ")");
+              }
+
+              private void loadSearchPage() {
+                  if (!isRunning) return;
+                  currentState = State.LOADING_SEARCH;
+                  try {
+                      String q = URLEncoder.encode(etQuery.getText().toString().trim(), "UTF-8");
+                      String searchUrl = "https://www.olx.kz/list/q-" + q + "/?page=" + currentPage;
+                      updateStatus("Поиск по РК: стр. " + currentPage + "...");
+                      webView.loadUrl(searchUrl);
+                  } catch (Exception e) {
+                      stopBot("Ошибка формирования ссылки");
+                  }
+              }
+
+              private void processNextAdInQueue() {
+                  if (!isRunning) return;
+
+                  while (!adQueue.isEmpty()) {
+                      String candidate = adQueue.remove(0);
+                      String cleanUrl = candidate.split("\\?")[0];
+                      if (!visitedAds.contains(cleanUrl)) {
+                          currentAdUrl = cleanUrl;
+                          currentState = State.LOADING_AD;
+                          updateStatus("Переход к организации (в очереди: " + adQueue.size() + ")...");
+                          webView.loadUrl(cleanUrl);
+                          return;
                       }
                   }
+
+                  currentPage++;
+                  if (currentPage > 25) {
+                      stopBot("Обход всех 25 страниц поиска завершён!");
+                      return;
+                  }
+                  int pagePause = 5000 + random.nextInt(4000);
+                  updateStatus("Страница " + (currentPage - 1) + " пройдена. Переход на стр. " + currentPage + "...");
+                  handler.postDelayed(this::loadSearchPage, pagePause);
               }
 
-              private fun onStartClicked() {
-                  if (isRunning) return
-                  isRunning = true
-                  startBtn.isEnabled = false
-                  stopBtn.isEnabled = true
-                  loginLayout.visibility = View.GONE
-
-                  val query = searchInput.text.toString().trim().ifEmpty { "бухгалтер" }
-                  val nextLikes = likePattern[patternStepIndex % likePattern.size]
-                  updateStatus("▶ Запущено! Поиск «$query»... (След. аккаунт: $nextLikes лайк(а))")
-
-                  openSearchAndCollectAccounts(query)
+              private void injectSearchScanner() {
+                  if (!isRunning) return;
+                  String js = "(function() {" +
+                          "window.scrollTo({top: document.body.scrollHeight / 3, behavior: 'smooth'});" +
+                          "setTimeout(function() {" +
+                          "  window.scrollTo({top: document.body.scrollHeight / 1.5, behavior: 'smooth'});" +
+                          "  setTimeout(function() {" +
+                          "    window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});" +
+                          "    setTimeout(function() {" +
+                          "      var anchors = document.querySelectorAll('a[href*=\"/d/obyavlenie/\"]');" +
+                          "      var list = [];" +
+                          "      for (var i = 0; i < anchors.length; i++) {" +
+                          "        var h = anchors[i].href.split('?')[0];" +
+                          "        if (h && list.indexOf(h) === -1) list.push(h);" +
+                          "      }" +
+                          "      AndroidBridge.onAdsCollected(JSON.stringify(list));" +
+                          "    }, 1500);" +
+                          "  }, 1500);" +
+                          "}, 1000);" +
+                          "})();";
+                  webView.evaluateJavascript(js, null);
               }
 
-              private fun onStopClicked() {
-                  isRunning = false
-                  handler.removeCallbacksAndMessages(null)
-                  startBtn.isEnabled = true
-                  stopBtn.isEnabled = false
-                  updateStatus("⏹ Остановлено пользователем. Нажмите СТАРТ для продолжения.")
+              private void injectAutomation() {
+                  if (!isRunning) return;
+                  String rawMsg = etMessage.getText().toString().trim()
+                          .replace("\\", "\\\\")
+                          .replace("\"", "\\\"")
+                          .replace("\n", "\\n")
+                          .replace("\r", "");
+
+                  String js = "(function() {" +
+                          "var msgText = \"" + rawMsg + "\";" +
+                          "window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});" +
+                          "setTimeout(function() {" +
+                          "  var btns = document.querySelectorAll('button, a');" +
+                          "  var msgBtn = null;" +
+                          "  for (var i = 0; i < btns.length; i++) {" +
+                          "    var t = (btns[i].innerText || '').toLowerCase();" +
+                          "    var cy = btns[i].getAttribute('data-cy') || '';" +
+                          "    if (cy === 'ad-contact-message-button' || t.indexOf('сообщение') !== -1 || t.indexOf('написать') !== -1) {" +
+                          "      msgBtn = btns[i]; break;" +
+                          "    }" +
+                          "  }" +
+                          "  if (msgBtn) {" +
+                          "    msgBtn.click();" +
+                          "    setTimeout(checkModalsAndFill, 2500);" +
+                          "  } else {" +
+                          "    AndroidBridge.onSkipAd('Нет кнопки сообщения');" +
+                          "  }" +
+                          "}, 1500);" +
+
+                          "function checkModalsAndFill() {" +
+                          "  var allBtns = document.querySelectorAll('button, role=\"button\"');" +
+                          "  for (var i = 0; i < allBtns.length; i++) {" +
+                          "    var txt = (allBtns[i].innerText || '').toLowerCase();" +
+                          "    var cyAttr = allBtns[i].getAttribute('data-cy') || '';" +
+                          "    if (cyAttr.indexOf('confirm') !== -1 || cyAttr.indexOf('phone') !== -1 || txt.indexOf('да') !== -1 || txt.indexOf('подтвердить') !== -1 || txt.indexOf('отправить номер') !== -1) {" +
+                          "      allBtns[i].click();" +
+                          "      setTimeout(checkModalsAndFill, 1500);" +
+                          "      return;" +
+                          "    }" +
+                          "  }" +
+                          "  var ta = document.querySelector('textarea[name=\"message\"], textarea');" +
+                          "  if (!ta) {" +
+                          "    AndroidBridge.onSkipAd('Поле ввода недоступно');" +
+                          "    return;" +
+                          "  }" +
+                          "  ta.focus();" +
+                          "  var setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;" +
+                          "  if (setter) { setter.call(ta, msgText); } else { ta.value = msgText; }" +
+                          "  ta.dispatchEvent(new Event('input', { bubbles: true }));" +
+                          "  setTimeout(clickSendBtn, 1000);" +
+                          "}" +
+
+                          "function clickSendBtn() {" +
+                          "  var sendBtn = document.querySelector('button[type=\"submit\"], button[data-cy=\"send-message-button\"]');" +
+                          "  if (!sendBtn) {" +
+                          "    var allB = document.querySelectorAll('button');" +
+                          "    for (var k = 0; k < allB.length; k++) {" +
+                          "      var bt = (allB[k].innerText || '').toLowerCase();" +
+                          "      if (bt.indexOf('отправить') !== -1) { sendBtn = allB[k]; break; }" +
+                          "    }" +
+                          "  }" +
+                          "  if (sendBtn && !sendBtn.disabled) {" +
+                          "    sendBtn.click();" +
+                          "    setTimeout(function() { AndroidBridge.onMessageSentSuccess(); }, 2000);" +
+                          "  } else {" +
+                          "    AndroidBridge.onSkipAd('Кнопка отправки не активна');" +
+                          "  }" +
+                          "}" +
+                          "})();";
+
+                  webView.evaluateJavascript(js, null);
               }
 
-              private fun openSearchAndCollectAccounts(query: String) {
-                  if (!isRunning) return
-
-                  collectSearchAccountsFromPage { existingList ->
-                      if (!isRunning) return@collectSearchAccountsFromPage
-
-                      val newAccounts = existingList.filter { it !in processedAccounts }
-                      if (newAccounts.isNotEmpty()) {
-                          accountQueue.clear()
-                          accountQueue.addAll(newAccounts)
-                          currentAccountIndex = 0
-                          updateStatus("Найдено аккаунтов в списке: ${accountQueue.size}. Начинаем обход сверху вниз...")
-                          processNextAccountInQueue()
-                      } else {
-                          updateStatus("Открываем панель поиска и вводим «$query»...")
-                          webView.loadUrl("https://www.instagram.com/explore/")
-                          handler.postDelayed({
-                              if (!isRunning) return@postDelayed
-                              typeSearchQueryInWebView(query)
-                          }, 4000)
-                      }
+              private void markCurrentAdVisited() {
+                  if (!currentAdUrl.isEmpty()) {
+                      visitedAds.add(currentAdUrl);
+                      prefs.edit().putStringSet("visited_urls", new HashSet<>(visitedAds)).apply();
                   }
               }
 
-              private fun typeSearchQueryInWebView(query: String) {
-                  if (!isRunning) return
-                  val escapedQuery = escapeJs(query)
-
-                  val js = """
-                      (function() {
-                          function setNativeValue(el, value) {
-                              const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                              valueSetter.call(el, value);
-                              el.dispatchEvent(new Event('input', { bubbles: true }));
-                              el.dispatchEvent(new Event('change', { bubbles: true }));
-                          }
-                          const searchBtn = document.querySelector('a[href*="/explore/"], svg[aria-label*="Поиск"], svg[aria-label*="Search"]');
-                          if (searchBtn && !document.querySelector('input[placeholder*="Поиск"], input[placeholder*="Search"], input[type="search"]')) {
-                              const clickable = searchBtn.closest('a, button, div[role="button"]') || searchBtn;
-                              clickable.click();
-                          }
-                          setTimeout(() => {
-                              const input = document.querySelector('input[placeholder*="Поиск"], input[placeholder*="Search"], input[aria-label*="Поиск"], input[aria-label*="Search"], input[type="search"], input[type="text"]');
-                              if (input) {
-                                  input.focus();
-                                  setNativeValue(input, '$escapedQuery');
-                              }
-                          }, 800);
-                      })();
-                  """.trimIndent()
-
-                  webView.evaluateJavascript(js, null)
-
-                  handler.postDelayed({
-                      if (!isRunning) return@postDelayed
-                      collectSearchAccountsFromPage { accounts ->
-                          if (!isRunning) return@collectSearchAccountsFromPage
-                          val filtered = accounts.filter { it !in processedAccounts }
-                          if (filtered.isEmpty()) {
-                              updateStatus("Не удалось найти новые аккаунты. Откройте поиск в Instagram вручную, введите запрос и нажмите СТАРТ.")
-                              onStopClicked()
-                          } else {
-                              accountQueue.clear()
-                              accountQueue.addAll(filtered)
-                              currentAccountIndex = 0
-                              updateStatus("Собрано аккаунтов сверху вниз: ${accountQueue.size}. Заходим в первый...")
-                              processNextAccountInQueue()
-                          }
-                      }
-                  }, 4800)
+              private void scheduleNextWithHumanPause(int minSec, int maxSec, String prefix) {
+                  if (!isRunning) return;
+                  currentState = State.WAITING_NEXT;
+                  int waitSeconds = minSec + random.nextInt(maxSec - minSec + 1);
+                  runCountdown(waitSeconds, prefix);
               }
 
-              private fun collectSearchAccountsFromPage(callback: (List<String>) -> Unit) {
-                  val js = """
-                      (function() {
-                          const excluded = new Set(['explore', 'reels', 'direct', 'accounts', 'p', 'reel', 'stories', 'tv', 'about', 'legal', 'privacy']);
-                          const anchors = Array.from(document.querySelectorAll('a[href^="/"]'));
-                          const items = [];
-                          const seen = new Set();
-
-                          for (const a of anchors) {
-                              const href = a.getAttribute('href');
-                              if (!href) continue;
-                              const clean = href.split('?')[0].replace(/^\/+|\/+$/g, '');
-                              if (!clean || clean.includes('/')) continue;
-                              if (excluded.has(clean.toLowerCase())) continue;
-
-                              const rect = a.getBoundingClientRect();
-                              if (rect.width === 0 || rect.height === 0) continue;
-
-                              const fullUrl = 'https://www.instagram.com/' + clean + '/';
-                              if (!seen.has(fullUrl)) {
-                                  seen.add(fullUrl);
-                                  items.push({ url: fullUrl, top: rect.top });
-                              }
-                          }
-                          items.sort((a, b) => a.top - b.top);
-                          return JSON.stringify(items.map(i => i.url));
-                      })();
-                  """.trimIndent()
-
-                  webView.evaluateJavascript(js) { rawJson ->
-                      val list = mutableListOf<String>()
-                      try {
-                          val unescaped = rawJson
-                              ?.trim()
-                              ?.removeSurrounding("\"")
-                              ?.replace("\\\"", "\"")
-                              ?.replace("\\\\", "\\") ?: "[]"
-                          val arr = JSONArray(unescaped)
-                          for (i in 0 until arr.length()) {
-                              list.add(arr.getString(i))
-                          }
-                      } catch (_: Exception) {
-                      }
-                      callback(list)
+              private void runCountdown(int secondsLeft, String prefix) {
+                  if (!isRunning) return;
+                  if (secondsLeft <= 0) {
+                      processNextAdInQueue();
+                      return;
                   }
+                  updateStatus(prefix + " | Пауза анти-бан: " + secondsLeft + " сек. (Отправлено: " + sentCount + ")");
+                  handler.postDelayed(() -> runCountdown(secondsLeft - 1, prefix), 1000);
               }
 
-              private fun processNextAccountInQueue() {
-                  if (!isRunning) return
-
-                  if (currentAccountIndex >= accountQueue.size) {
-                      val query = searchInput.text.toString().trim().ifEmpty { "бухгалтер" }
-                      updateStatus("Список пройден. Возвращаемся в поиск за новыми аккаунтами «$query»...")
-                      openSearchAndCollectAccounts(query)
-                      return
-                  }
-
-                  val accountUrl = accountQueue[currentAccountIndex]
-                  currentAccountIndex++
-
-                  val likesToPut = likePattern[patternStepIndex % likePattern.size]
-                  patternStepIndex++
-
-                  updateStatus("Аккаунт [$currentAccountIndex/${accountQueue.size}]: открываем профиль (План: $likesToPut лайк(а) + сообщение)...")
-                  webView.loadUrl(accountUrl)
-
-                  handler.postDelayed({
-                      if (!isRunning) return@postDelayed
-                      collectLatestPostsAndLike(accountUrl, likesToPut)
-                  }, randomDelay(4200, 5500))
+              private void updateStatus(String text) {
+                  handler.post(() -> tvStatus.setText(text));
               }
 
-              private fun collectLatestPostsAndLike(accountUrl: String, likesCount: Int) {
-                  if (!isRunning) return
-
-                  val js = """
-                      (function() {
-                          const links = Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'));
-                          const urls = [];
-                          for (const l of links) {
-                              const h = l.href;
-                              if (h && !urls.includes(h)) {
-                                  urls.push(h);
-                              }
-                              if (urls.length >= $likesCount) break;
-                          }
-                          return JSON.stringify(urls);
-                      })();
-                  """.trimIndent()
-
-                  webView.evaluateJavascript(js) { rawJson ->
-                      if (!isRunning) return@evaluateJavascript
-                      val postUrls = mutableListOf<String>()
-                      try {
-                          val unescaped = rawJson
-                              ?.trim()
-                              ?.removeSurrounding("\"")
-                              ?.replace("\\\"", "\"")
-                              ?.replace("\\\\", "\\") ?: "[]"
-                          val arr = JSONArray(unescaped)
-                          for (i in 0 until arr.length()) {
-                              postUrls.add(arr.getString(i))
-                          }
-                      } catch (_: Exception) {
-                      }
-
-                      if (postUrls.isEmpty()) {
-                          updateStatus("Постов нет (или профиль закрыт). Переходим сразу к отправке сообщения...")
-                          openMessageAndSend(accountUrl)
-                      } else {
-                          likePostsSequentially(accountUrl, postUrls, 0)
-                      }
-                  }
-              }
-
-              private fun likePostsSequentially(
-                  accountUrl: String,
-                  postUrls: List<String>,
-                  index: Int
-              ) {
-                  if (!isRunning) return
-
-                  if (index >= postUrls.size) {
-                      updateStatus("Поставлено лайков: ${postUrls.size}. Возвращаемся в профиль для отправки сообщения...")
-                      webView.loadUrl(accountUrl)
-                      handler.postDelayed({
-                          if (!isRunning) return@postDelayed
-                          openMessageAndSend(accountUrl)
-                      }, randomDelay(3500, 4800))
-                      return
-                  }
-
-                  val postUrl = postUrls[index]
-                  updateStatus("Ставим лайк ${index + 1} из ${postUrls.size}...")
-                  webView.loadUrl(postUrl)
-
-                  handler.postDelayed({
-                      if (!isRunning) return@postDelayed
-
-                      val likeJs = """
-                          (function() {
-                              const unlikeSvg = document.querySelector('svg[aria-label="Не нравится"], svg[aria-label="Unlike"]');
-                              if (unlikeSvg) return 'ALREADY_LIKED';
-
-                              const likeSvg = document.querySelector('svg[aria-label="Нравится"], svg[aria-label="Like"]');
-                              if (likeSvg) {
-                                  const btn = likeSvg.closest('div[role="button"], button') || likeSvg;
-                                  btn.click();
-                                  return 'LIKED';
-                              }
-                              return 'NOT_FOUND';
-                          })();
-                      """.trimIndent()
-
-                      webView.evaluateJavascript(likeJs) {
-                          handler.postDelayed({
-                              likePostsSequentially(accountUrl, postUrls, index + 1)
-                          }, randomDelay(2200, 3400))
-                      }
-                  }, randomDelay(3200, 4500))
-              }
-
-              private fun openMessageAndSend(accountUrl: String) {
-                  if (!isRunning) return
-                  updateStatus("Нажимаем кнопку «Сообщение»...")
-
-                  val clickMsgJs = """
-                      (function() {
-                          const buttons = Array.from(document.querySelectorAll('div[role="button"], button, a'));
-                          const msgBtn = buttons.find(b => {
-                              const t = (b.innerText || '').trim().toLowerCase();
-                              return t === 'отправить сообщение' || t === 'сообщение' || t === 'message';
-                          });
-                          if (msgBtn) {
-                              msgBtn.click();
-                              return 'CLICKED';
-                          }
-                          return 'NO_BTN';
-                      })();
-                  """.trimIndent()
-
-                  webView.evaluateJavascript(clickMsgJs) { res ->
-                      if (!isRunning) return@evaluateJavascript
-
-                      if (res?.contains("NO_BTN") == true) {
-                          updateStatus("Кнопка сообщения недоступна. Возвращаемся к списку поиска...")
-                          processedAccounts.add(accountUrl)
-                          returnToSearchAndContinue()
-                          return@evaluateJavascript
-                      }
-
-                      handler.postDelayed({
-                          if (!isRunning) return@postDelayed
-                          typeAndSendMessageInDirect(accountUrl)
-                      }, randomDelay(4200, 5500))
-                  }
-              }
-
-              private fun typeAndSendMessageInDirect(accountUrl: String) {
-                  if (!isRunning) return
-                  updateStatus("Печатаем: «$messageToSend»...")
-
-                  val escapedMsg = escapeJs(messageToSend)
-                  val sendJs = """
-                      (function() {
-                          const notNow = Array.from(document.querySelectorAll('button, div[role="button"]'))
-                              .find(b => /не сейчас|not now/i.test(b.innerText || ''));
-                          if (notNow) notNow.click();
-
-                          const box = document.querySelector('div[role="textbox"][contenteditable="true"], textarea[placeholder], div[aria-label*="Сообщение"], div[aria-label*="Message"]');
-                          if (!box) return 'NO_INPUT';
-
-                          box.focus();
-                          if (box.tagName.toLowerCase() === 'textarea') {
-                              const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-                              valueSetter.call(box, '$escapedMsg');
-                              box.dispatchEvent(new Event('input', { bubbles: true }));
-                          } else {
-                              document.execCommand('selectAll', false, null);
-                              document.execCommand('insertText', false, '$escapedMsg');
-                              box.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: '$escapedMsg' }));
-                          }
-
-                          setTimeout(() => {
-                              const sendBtn = Array.from(document.querySelectorAll('div[role="button"], button'))
-                                  .find(b => {
-                                      const t = (b.innerText || '').trim().toLowerCase();
-                                      const label = (b.getAttribute('aria-label') || '').toLowerCase();
-                                      return t === 'отправить' || t === 'send' || label.includes('отправить') || label.includes('send');
-                                  });
-                              if (sendBtn) {
-                                  sendBtn.click();
-                              } else {
-                                  const enterEvent = new KeyboardEvent('keydown', {
-                                      bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13
-                                  });
-                                  box.dispatchEvent(enterEvent);
-                              }
-                          }, 900);
-
-                          return 'SENT';
-                      })();
-                  """.trimIndent()
-
-                  webView.evaluateJavascript(sendJs) {
-                      if (!isRunning) return@evaluateJavascript
-                      processedAccounts.add(accountUrl)
-                      updateStatus("✉ Сообщение отправлено! Возвращаемся в список поиска к следующему аккаунту...")
-
-                      handler.postDelayed({
-                          returnToSearchAndContinue()
-                      }, randomDelay(4500, 6800))
-                  }
-              }
-
-              private fun returnToSearchAndContinue() {
-                  if (!isRunning) return
-                  val query = searchInput.text.toString().trim().ifEmpty { "бухгалтер" }
-                  updateStatus("Возвращаемся в список поиска «$query» и выбираем следующий аккаунт...")
-                  handler.postDelayed({
-                      processNextAccountInQueue()
-                  }, randomDelay(2500, 4000))
-              }
-
-              private fun updateStatus(msg: String) {
-                  runOnUiThread {
-                      statusText.text = msg
-                  }
-              }
-
-              private fun randomDelay(minMs: Long, maxMs: Long): Long {
-                  return Random.nextLong(minMs, maxMs)
-              }
-
-              private fun dp(value: Int): Int {
-                  return TypedValue.applyDimension(
-                      TypedValue.COMPLEX_UNIT_DIP,
-                      value.toFloat(),
-                      resources.displayMetrics
-                  ).toInt()
-              }
-
-              private fun escapeJs(str: String): String {
-                  return str.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
-              }
-
-              inner class BotJsBridge {
+              private class WebAppInterface {
                   @JavascriptInterface
-                  fun log(message: String) {
-                      updateStatus(message)
+                  public void onAdsCollected(String jsonArray) {
+                      handler.post(() -> {
+                          if (!isRunning) return;
+                          try {
+                              JSONArray arr = new JSONArray(jsonArray);
+                              int added = 0;
+                              for (int i = 0; i < arr.length(); i++) {
+                                  String url = arr.getString(i);
+                                  if (!visitedAds.contains(url) && !adQueue.contains(url)) {
+                                      adQueue.add(url);
+                                      added++;
+                                  }
+                              }
+                              updateStatus("Найдено новых организаций на стр. " + currentPage + ": " + added);
+                              handler.postDelayed(() -> processNextAdInQueue(), 2000);
+                          } catch (Exception e) {
+                              stopBot("Ошибка чтения списка объявлений");
+                          }
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void onMessageSentSuccess() {
+                      handler.post(() -> {
+                          if (!isRunning) return;
+                          markCurrentAdVisited();
+                          sentCount++;
+                          scheduleNextWithHumanPause(15, 30, "Сообщение отправлено!");
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void onSkipAd(String reason) {
+                      handler.post(() -> {
+                          if (!isRunning) return;
+                          markCurrentAdVisited();
+                          scheduleNextWithHumanPause(3, 6, "Пропуск (" + reason + ")");
+                      });
+                  }
+
+                  @JavascriptInterface
+                  public void onLog(String msg) {
+                      updateStatus(msg + " (Отправлено: " + sentCount + ")");
                   }
               }
           }
           EOF
 
-      - name: Установка Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Установка Gradle 8.4
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.4'
+          gradle-version: '8.5'
 
-      - name: Сборка APK-файла
-        working-directory: InstaBuhBot_Android
+      - name: Build Debug APK
         run: gradle assembleDebug --no-daemon
 
-      - name: Выгрузка готового APK
+      - name: Upload Ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: InstaBuhBot-APK
-          path: InstaBuhBot_Android/app/build/outputs/apk/debug/app-debug.apk
+          name: OLX-Automator-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
