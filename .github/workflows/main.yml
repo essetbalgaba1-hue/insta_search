@@ -64,8 +64,8 @@ jobs:
                   applicationId "com.olx.automator"
                   minSdk 24
                   targetSdk 34
-                  versionCode 6
-                  versionName "1.5"
+                  versionCode 8
+                  versionName "1.7"
               }
 
               buildTypes {
@@ -294,7 +294,7 @@ jobs:
                               updateStatus("Сканирую стр. " + currentPage + " (все страницы)...");
                               handler.postDelayed(() -> injectSearchScanner(), 3000);
                           } else if (currentState == State.LOADING_AD) {
-                              updateStatus("Анкета открыта. Отправка...");
+                              updateStatus("Анкета открыта. Обработка...");
                               handler.postDelayed(() -> injectAutomation(), 3000);
                           }
                       }
@@ -429,29 +429,32 @@ jobs:
 
                   String js = "(function() {" +
                           "var msgText = \"" + rawMsg + "\";" +
-                          "window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});" +
+                          "window.scrollTo({top: document.body.scrollHeight / 2, behavior: 'smooth'});" +
                           "setTimeout(function() {" +
-                          "  var bodyText = document.body.innerText || '';" +
-                          "  if (bodyText.indexOf('Мирас') !== -1 && bodyText.indexOf('программист') !== -1) {" +
-                          "    AndroidBridge.onSkipAd('Сообщение уже было отправлено ранее');" +
-                          "    return;" +
-                          "  }" +
-                          "  var allEls = document.querySelectorAll('button, a, div');" +
-                          "  var msgBtn = null;" +
-                          "  for (var i = 0; i < allEls.length; i++) {" +
-                          "    var t = (allEls[i].innerText || '').toLowerCase();" +
-                          "    var cy = allEls[i].getAttribute('data-cy') || '';" +
-                          "    if (cy === 'ad-contact-message-button' || t === 'сообщение' || t === 'написать' || t.indexOf('сообщение') !== -1) {" +
-                          "      if (allEls[i].offsetParent !== null) { msgBtn = allEls[i]; break; }" +
+                          "  window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});" +
+                          "  setTimeout(function() {" +
+                          "    var bodyText = document.body.innerText || '';" +
+                          "    if (bodyText.indexOf('Мирас') !== -1 && bodyText.indexOf('программист') !== -1) {" +
+                          "      AndroidBridge.onSkipAd('Сообщение уже было отправлено ранее');" +
+                          "      return;" +
                           "    }" +
-                          "  }" +
-                          "  if (msgBtn) {" +
-                          "    msgBtn.click();" +
-                          "    setTimeout(checkInputAndSend, 2500);" +
-                          "  } else {" +
-                          "    AndroidBridge.onSkipAd('Нет кнопки сообщения');" +
-                          "  }" +
-                          "}, 1500);" +
+                          "    var allEls = document.querySelectorAll('button, a, div');" +
+                          "    var msgBtn = null;" +
+                          "    for (var i = 0; i < allEls.length; i++) {" +
+                          "      var t = (allEls[i].innerText || '').toLowerCase();" +
+                          "      var cy = allEls[i].getAttribute('data-cy') || '';" +
+                          "      if (cy === 'ad-contact-message-button' || t === 'сообщение' || t === 'написать' || t.indexOf('сообщение') !== -1) {" +
+                          "        if (allEls[i].offsetParent !== null) { msgBtn = allEls[i]; break; }" +
+                          "      }" +
+                          "    }" +
+                          "    if (msgBtn) {" +
+                          "      msgBtn.click();" +
+                          "      setTimeout(checkInputAndSend, 2500);" +
+                          "    } else {" +
+                          "      AndroidBridge.onSkipAd('Нет кнопки сообщения');" +
+                          "    }" +
+                          "  }, 1000);" +
+                          "}, 1000);" +
 
                           "function checkInputAndSend() {" +
                           "  var popups = document.querySelectorAll('button, a, div[role=\"button\"]');" +
@@ -464,7 +467,7 @@ jobs:
                           "      return;" +
                           "    }" +
                           "  }" +
-                          "  var ta = document.querySelector('textarea, input[type=\"text\"]');" +
+                          "  var ta = document.querySelector('textarea, input[placeholder*=\"сообщение\"], input[type=\"text\"]');" +
                           "  if (!ta) {" +
                           "    setTimeout(checkInputAndSend, 1000);" +
                           "    return;" +
@@ -534,7 +537,7 @@ jobs:
                               JSONArray arr = new JSONArray(jsonArray);
                               int added = 0;
                               for (int i = 0; i < arr.length(); i++) {
-                              String url = arr.getString(i);
+                                  String url = arr.getString(i);
                                   if (!visitedAds.contains(url) && !adQueue.contains(url)) {
                                       adQueue.add(url);
                                       added++;
@@ -554,7 +557,7 @@ jobs:
                           if (!isRunning) return;
                           markCurrentAdVisited();
                           sentCount++;
-                          scheduleNextWithHumanPause(10, 20, "Сообщение отправлено!");
+                          scheduleNextWithHumanPause(8, 15, "Сообщение отправлено!");
                       });
                   }
 
