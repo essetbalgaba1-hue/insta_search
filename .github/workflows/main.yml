@@ -64,8 +64,8 @@ jobs:
                   applicationId "com.olx.automator"
                   minSdk 24
                   targetSdk 34
-                  versionCode 5
-                  versionName "1.4"
+                  versionCode 6
+                  versionName "1.5"
               }
 
               buildTypes {
@@ -294,8 +294,8 @@ jobs:
                               updateStatus("Сканирую стр. " + currentPage + " (все страницы)...");
                               handler.postDelayed(() -> injectSearchScanner(), 3000);
                           } else if (currentState == State.LOADING_AD) {
-                              updateStatus("Проверка анкеты и отправка...");
-                              handler.postDelayed(() -> injectAutomation(), 2500);
+                              updateStatus("Анкета открыта. Отправка...");
+                              handler.postDelayed(() -> injectAutomation(), 3000);
                           }
                       }
                   });
@@ -344,7 +344,7 @@ jobs:
                   btnStart.setEnabled(false);
                   btnStop.setEnabled(true);
                   settingsContainer.setVisibility(View.GONE);
-                  btnTogglePanel.setText("Поля ▼");
+                  btnTogglePanel.setText("Поля ▲");
 
                   loadSearchPage();
               }
@@ -447,33 +447,33 @@ jobs:
                           "  }" +
                           "  if (msgBtn) {" +
                           "    msgBtn.click();" +
-                          "    setTimeout(handleModalsAndFill, 2000);" +
+                          "    setTimeout(checkInputAndSend, 2500);" +
                           "  } else {" +
                           "    AndroidBridge.onSkipAd('Нет кнопки сообщения');" +
                           "  }" +
-                          "}, 1200);" +
+                          "}, 1500);" +
 
-                          "function handleModalsAndFill() {" +
+                          "function checkInputAndSend() {" +
                           "  var popups = document.querySelectorAll('button, a, div[role=\"button\"]');" +
                           "  for (var j = 0; j < popups.length; j++) {" +
                           "    var txt = (popups[j].innerText || '').toLowerCase();" +
                           "    var cAttr = popups[j].getAttribute('data-cy') || '';" +
                           "    if (cAttr.indexOf('confirm') !== -1 || txt === 'да' || txt.indexOf('подтвердить') !== -1 || txt.indexOf('отправить номер') !== -1) {" +
                           "      popups[j].click();" +
-                          "      setTimeout(handleModalsAndFill, 1200);" +
+                          "      setTimeout(checkInputAndSend, 1500);" +
                           "      return;" +
                           "    }" +
                           "  }" +
-                          "  var ta = document.querySelector('textarea[name=\"message\"], textarea');" +
+                          "  var ta = document.querySelector('textarea, input[type=\"text\"]');" +
                           "  if (!ta) {" +
-                          "    AndroidBridge.onSkipAd('Поле ввода недоступно');" +
+                          "    setTimeout(checkInputAndSend, 1000);" +
                           "    return;" +
                           "  }" +
                           "  ta.focus();" +
                           "  ta.value = msgText;" +
                           "  ta.dispatchEvent(new Event('input', { bubbles: true }));" +
                           "  ta.dispatchEvent(new Event('change', { bubbles: true }));" +
-                          "  setTimeout(clickSendBtn, 800);" +
+                          "  setTimeout(clickSendBtn, 1000);" +
                           "}" +
 
                           "function clickSendBtn() {" +
@@ -487,7 +487,7 @@ jobs:
                           "  }" +
                           "  if (sendBtn && !sendBtn.disabled) {" +
                           "    sendBtn.click();" +
-                          "    setTimeout(function() { AndroidBridge.onMessageSentSuccess(); }, 1500);" +
+                          "    setTimeout(function() { AndroidBridge.onMessageSentSuccess(); }, 2000);" +
                           "  } else {" +
                           "    AndroidBridge.onSkipAd('Кнопка отправки не активна');" +
                           "  }" +
@@ -534,7 +534,7 @@ jobs:
                               JSONArray arr = new JSONArray(jsonArray);
                               int added = 0;
                               for (int i = 0; i < arr.length(); i++) {
-                                  String url = arr.getString(i);
+                              String url = arr.getString(i);
                                   if (!visitedAds.contains(url) && !adQueue.contains(url)) {
                                       adQueue.add(url);
                                       added++;
