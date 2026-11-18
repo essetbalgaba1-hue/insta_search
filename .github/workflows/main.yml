@@ -64,8 +64,8 @@ jobs:
                   applicationId "com.olx.automator"
                   minSdk 24
                   targetSdk 34
-                  versionCode 8
-                  versionName "1.7"
+                  versionCode 9
+                  versionName "1.8"
               }
 
               buildTypes {
@@ -467,16 +467,21 @@ jobs:
                           "      return;" +
                           "    }" +
                           "  }" +
-                          "  var ta = document.querySelector('textarea, input[placeholder*=\"сообщение\"], input[type=\"text\"]');" +
+                          "  var ta = document.querySelector('textarea, div[contenteditable=\"true\"], input[placeholder*=\"сообщение\"], input[type=\"text\"]');" +
                           "  if (!ta) {" +
                           "    setTimeout(checkInputAndSend, 1000);" +
                           "    return;" +
                           "  }" +
                           "  ta.focus();" +
-                          "  ta.value = msgText;" +
+                          "  ta.click();" +
+                          "  if (ta.tagName.toLowerCase() === 'div') {" +
+                          "    ta.innerText = msgText;" +
+                          "  } else {" +
+                          "    ta.value = msgText;" +
+                          "  }" +
                           "  ta.dispatchEvent(new Event('input', { bubbles: true }));" +
                           "  ta.dispatchEvent(new Event('change', { bubbles: true }));" +
-                          "  setTimeout(clickSendBtn, 1000);" +
+                          "  setTimeout(clickSendBtn, 1200);" +
                           "}" +
 
                           "function clickSendBtn() {" +
@@ -488,7 +493,7 @@ jobs:
                           "      if (bt.indexOf('отправить') !== -1) { sendBtn = allB[k]; break; }" +
                           "    }" +
                           "  }" +
-                          "  if (sendBtn && !sendBtn.disabled) {" +
+                          "  if (sendBtn) {" +
                           "    sendBtn.click();" +
                           "    setTimeout(function() { AndroidBridge.onMessageSentSuccess(); }, 2000);" +
                           "  } else {" +
